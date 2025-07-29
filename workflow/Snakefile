@@ -2,6 +2,9 @@ configfile: "config/config.yaml"
 
 
 fractions = lookup("sampling/fractions", within=config)
+species = lookup("ref/species", within=config)
+ens_build = lookup("ref/build", within=config)
+ens_release = lookup("ref/release", within=config)
 
 
 rule all:
@@ -22,10 +25,10 @@ rule get_genome:
     output:
         "resources/genome.fasta",
     params:
-        species="homo_sapiens",
+        species=species,
         datatype="dna",
-        build=lookup("ref/build", within=config),
-        release=lookup("ref/release", within=config),
+        build=ens_build,
+        release=ens_release,
         chromosome="21",
     log:
         "logs/get_genome.log",
@@ -43,44 +46,6 @@ rule samtools_index:
         "logs/samtools/index.log",
     wrapper:
         "v7.2.0/bio/samtools/faidx"
-
-
-rule get_annotation:
-    output:
-        "resources/annotation.gff3",
-    params:
-        species="homo_sapiens",
-        release=lookup("ref/release", within=config),
-        build=lookup("ref/build", within=config),
-    log:
-        "logs/get_annotation.log",
-    cache: "omit-software"
-    wrapper:
-        "v7.2.0/bio/reference/ensembl-annotation"
-
-
-rule bgzip:
-    input:
-        "{prefix}"
-    output:
-        "{prefix}.gz"
-    log:
-        "logs/bgzip/{prefix}.log"
-    wrapper:
-        "v7.2.0/bio/bgzip"
-
-
-rule tabix:
-    input:
-        "resources/annotation.gff3.gz",
-    output:
-        "resources/annotation.gff3.gz.csi",
-    log:
-        "logs/tabix.log",
-    params:
-        "-p gff",
-    wrapper:
-        "v7.2.0/bio/tabix/index"
 
 
 rule mason_simulate_variants:
@@ -105,20 +70,31 @@ rule get_vep_plugins:
         "v6.2.0/bio/vep/plugins"
 
 
+rule get_vep_cache:
+    output:
+        directory("resources/vep/cache"),
+    params:
+        species=species,
+        build=ens_build,
+        release=ens_release,
+    log:
+        "logs/vep/cache.log",
+    cache: "omit-software"  # save space and time with between workflow caching (see docs)
+    wrapper:
+        "v7.2.0/bio/vep/cache"
+
+
 rule annotate_variants:
     input:
         calls="results/variants/all.vcf",
-        fasta="resources/genome.fasta",
-        fai="resources/genome.fasta.fai",
+        cache="resources/vep/cache",
         plugins="resources/vep/plugins",
-        #gff="resources/annotation.gff3.gz",
-        #csi="resources/annotation.gff3.gz.csi",
     output:
         calls="results/variants/all.annotated.bcf",
         stats="results/variants/all.stats.html",
     params:
         plugins=[],
-        extra="--vcf_info_field ANN --database",
+        extra="--vcf_info_field ANN",
     log:
         "logs/vep/annotate.log",
     threads: 4
@@ -139,7 +115,6 @@ rule subsample_variants:
         "scripts/subsample_variants.py"
 
 
-
 rule bcftools_sort:
     input:
         "results/variants/{fraction}.bcf",
@@ -158,7 +133,6 @@ rule bcftools_sort:
         mem_mb=4000,
     wrapper:
         "v7.2.0/bio/bcftools/sort"
-
 
 
 rule vembrane_sort:
