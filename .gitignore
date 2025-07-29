@@ -1,0 +1,7 @@
+/.snakemake
+/results
+/resources
+/logs
+/benchmarks
+__pycache__
+*.pyc

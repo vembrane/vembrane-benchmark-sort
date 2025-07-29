@@ -1,0 +1,28 @@
+ref:
+  build: GRCh38
+  release: 114
+
+sampling:
+  fractions:
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+    - 1.0
+
+vembrane:
+  expressions:
+    pos: "CHROM, POS"
+    impact: >
+      {"HIGH": 0, "MODERATE: 1, "LOW": 2, "MODIFIER" 3}[ANN["IMPACT"]]
+    vus: >
+      int(math.log10(ANN["gnomad_AF"])), desc(ANN["REVEL"])
+  max_in_mem_records:
+    - 100000
+    - 10000
+    - 1000

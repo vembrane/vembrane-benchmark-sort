@@ -1,0 +1,183 @@
+configfile: "config/config.yaml"
+
+
+fractions = lookup("sampling/fractions", within=config)
+
+
+rule all:
+    input:
+        collect(
+            "results/variants/{fraction}.bcftools.sorted.bcf",
+            fraction=fractions
+        ),
+        collect(
+            "results/variants/{fraction}.vembrane.{expression}.{max_in_mem_records}.sorted.bcf",
+            fraction=fractions,
+            max_in_mem_records=lookup("vembrane/max_in_mem_records", within=config),
+            expression=lookup("vembrane/expressions", within=config),
+        )
+
+
+rule get_genome:
+    output:
+        "resources/genome.fasta",
+    params:
+        species="homo_sapiens",
+        datatype="dna",
+        build=lookup("ref/build", within=config),
+        release=lookup("ref/release", within=config),
+        chromosome="21",
+    log:
+        "logs/get_genome.log",
+    cache: "omit-software"
+    wrapper:
+        "v7.2.0/bio/reference/ensembl-sequence"
+
+
+rule samtools_index:
+    input:
+        "resources/genome.fasta",
+    output:
+        "resources/genome.fasta.fai",
+    log:
+        "logs/samtools/index.log",
+    wrapper:
+        "v7.2.0/bio/samtools/faidx"
+
+
+rule get_annotation:
+    output:
+        "resources/annotation.gff3",
+    params:
+        species="homo_sapiens",
+        release=lookup("ref/release", within=config),
+        build=lookup("ref/build", within=config),
+    log:
+        "logs/get_annotation.log",
+    cache: "omit-software"
+    wrapper:
+        "v7.2.0/bio/reference/ensembl-annotation"
+
+
+rule bgzip:
+    input:
+        "{prefix}"
+    output:
+        "{prefix}.gz"
+    log:
+        "logs/bgzip/{prefix}.log"
+    wrapper:
+        "v7.2.0/bio/bgzip"
+
+
+rule tabix:
+    input:
+        "resources/annotation.gff3.gz",
+    output:
+        "resources/annotation.gff3.gz.csi",
+    log:
+        "logs/tabix.log",
+    params:
+        "-p gff",
+    wrapper:
+        "v7.2.0/bio/tabix/index"
+
+
+rule mason_simulate_variants:
+    input:
+        "resources/genome.fasta",
+    output:
+        "results/variants/all.vcf",
+    log:
+        "logs/mason/simulate_variants.log",
+    shell:
+        "mason_variator -ir {input} "
+        " -ov {output} 2> {log}"
+
+
+rule get_vep_plugins:
+    output:
+        directory("resources/vep/plugins"),
+    params:
+        release=lookup("ref/release", within=config),
+    cache: "omit-software"
+    wrapper:
+        "v6.2.0/bio/vep/plugins"
+
+
+rule annotate_variants:
+    input:
+        calls="results/variants/all.vcf",
+        fasta="resources/genome.fasta",
+        fai="resources/genome.fasta.fai",
+        plugins="resources/vep/plugins",
+        #gff="resources/annotation.gff3.gz",
+        #csi="resources/annotation.gff3.gz.csi",
+    output:
+        calls="results/variants/all.annotated.bcf",
+        stats="results/variants/all.stats.html",
+    params:
+        plugins=[],
+        extra="--vcf_info_field ANN --database",
+    log:
+        "logs/vep/annotate.log",
+    threads: 4
+    wrapper:
+        "v7.2.0/bio/vep/annotate"
+
+
+rule subsample_variants:
+    input:
+        vars="results/variants/all.annotated.bcf",
+    output:
+        expand("results/variants/{fraction}.bcf", fraction=fractions),
+    log:
+        "logs/subsample.log",
+    params:
+        subsample_fractions=fractions,
+    script:
+        "scripts/subsample_variants.py"
+
+
+
+rule bcftools_sort:
+    input:
+        "results/variants/{fraction}.bcf",
+    output:
+        "results/variants/{fraction}.bcftools.sorted.bcf",
+    log:
+        "logs/bcftools/sort/{fraction}.log",
+    benchmark:
+        "benchmarks/bcftools/sort/{fraction}.tsv",
+    params:
+        # Set to True, in case you want uncompressed BCF output
+        uncompressed_bcf=False,
+        # Extra arguments
+        extras="-Ou",
+    resources:
+        mem_mb=4000,
+    wrapper:
+        "v7.2.0/bio/bcftools/sort"
+
+
+
+rule vembrane_sort:
+    input:
+        "results/variants/{fraction}.bcf",
+    output:
+        "results/variants/{fraction}.vembrane.{expression}.{max_in_mem_records,[0-9]+}.sorted.bcf",
+    log:
+        "logs/vembrane/sort/{fraction}/{expression}/{max_in_mem_records}.log",
+    benchmark:
+        "benchmarks/vembrane/sort/{fraction}/{expression}/{max_in_mem_records}.tsv",
+    params:
+        expression=lookup("vembrane/expressions/{expression}", within=config),
+        max_in_mem_records=lambda w: int(w.max_in_mem_records)
+    conda:
+        "envs/vembrane.yaml",
+    shell:
+        "vembrane sort "
+        "--max-in-mem-records {params.max_in_mem_records} "
+        "--output-fmt uncompressed-bcf "
+        "{params.expression} "
+        "{input} > {output} 2> {log}"
