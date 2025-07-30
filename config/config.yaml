@@ -1,8 +1,9 @@
 ref:
   build: GRCh38
-  release: 114
+  release: 112
 
 sampling:
+  seed: 18764123
   fractions:
     - 0.1
     - 0.2
@@ -19,9 +20,9 @@ vembrane:
   expressions:
     pos: "CHROM, POS"
     impact: >
-      {"HIGH": 0, "MODERATE: 1, "LOW": 2, "MODIFIER" 3}[ANN["IMPACT"]]
+      {"HIGH": 0, "MODERATE": 1, "LOW": 2, "MODIFIER": 3, NA: NA}[ANN["IMPACT"]]
     vus: >
-      int(math.log10(ANN["gnomad_AF"])), desc(ANN["REVEL"])
+      int(log10(ANN["gnomad_AF"])), desc(ANN["REVEL"])
   max_in_mem_records:
     - 100000
     - 10000

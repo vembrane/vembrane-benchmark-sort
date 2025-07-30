@@ -2,7 +2,7 @@ configfile: "config/config.yaml"
 
 
 fractions = lookup("sampling/fractions", within=config)
-species = lookup("ref/species", within=config)
+species = "homo_sapiens"
 ens_build = lookup("ref/build", within=config)
 ens_release = lookup("ref/release", within=config)
 
@@ -87,14 +87,16 @@ rule get_vep_cache:
 rule annotate_variants:
     input:
         calls="results/variants/all.vcf",
-        cache="resources/vep/cache",
+        #cache="resources/vep/cache",
         plugins="resources/vep/plugins",
+        fasta="resources/genome.fasta",
+        fai="resources/genome.fasta.fai",
     output:
         calls="results/variants/all.annotated.bcf",
         stats="results/variants/all.stats.html",
     params:
         plugins=[],
-        extra="--vcf_info_field ANN",
+        extra="--vcf_info_field ANN --database",
     log:
         "logs/vep/annotate.log",
     threads: 4
@@ -111,6 +113,9 @@ rule subsample_variants:
         "logs/subsample.log",
     params:
         subsample_fractions=fractions,
+        seed=lookup("sampling/seed", within=config),
+    conda:
+        "envs/pysam.yaml"
     script:
         "scripts/subsample_variants.py"
 
@@ -130,7 +135,7 @@ rule bcftools_sort:
         # Extra arguments
         extras="-Ou",
     resources:
-        mem_mb=4000,
+        mem_mb=4000, benchmark=1
     wrapper:
         "v7.2.0/bio/bcftools/sort"
 
@@ -149,9 +154,11 @@ rule vembrane_sort:
         max_in_mem_records=lambda w: int(w.max_in_mem_records)
     conda:
         "envs/vembrane.yaml",
+    resources:
+        benchmark=1,
     shell:
-        "vembrane sort "
+        "vembrane sort --backend pysam "
         "--max-in-mem-records {params.max_in_mem_records} "
         "--output-fmt uncompressed-bcf "
-        "{params.expression} "
+        "{params.expression:q} "
         "{input} > {output} 2> {log}"
