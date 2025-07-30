@@ -55,6 +55,8 @@ rule mason_simulate_variants:
         "results/variants/all.vcf",
     log:
         "logs/mason/simulate_variants.log",
+    conda:
+        "envs/mason.yaml"
     shell:
         "mason_variator -ir {input} "
         " -ov {output} 2> {log}"
