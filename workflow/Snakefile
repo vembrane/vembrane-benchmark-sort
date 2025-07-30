@@ -159,7 +159,7 @@ rule vembrane_sort:
     resources:
         benchmark=1,
     shell:
-        "vembrane sort --backend pysam "
+        "vembrane sort --backend pysam " # TODO fix heapq for cyvcf2 (wrap items into sortable dataclass)
         "--max-in-mem-records {params.max_in_mem_records} "
         "--output-fmt uncompressed-bcf "
         "{params.expression:q} "
